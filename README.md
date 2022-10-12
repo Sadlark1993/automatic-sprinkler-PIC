@@ -1,2 +1,2 @@
-# automatic-sprinkler-PIC
-A PIC Microcontroller Project 
+# Automatic Sprinkler PIC
+A microcontroller course project
