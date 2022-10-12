@@ -107,6 +107,32 @@ unsigned int s4[4][4] = {{0,0,0,0},
                          {0,0,0,0}};
                          
 unsigned int period[4]; //variavel auxiliar q guardara temporariamente um periodo
+
+void store_data(unsigned int i, unsigned int s){
+   if(s == 1){
+      s1[i][0] = period[0];
+      s1[i][1] = period[1];
+      s1[i][2] = period[2];
+      s1[i][3] = period[3];
+   }else if(s == 2){
+      s2[i][0] = period[0];
+      s2[i][1] = period[1];
+      s2[i][2] = period[2];
+      s2[i][3] = period[3];
+   }else if(s == 3){
+      s3[i][0] = period[0];
+      s3[i][1] = period[1];
+      s3[i][2] = period[2];
+      s3[i][3] = period[3];
+   }else if(s == 4){
+      s4[i][0] = period[0];
+      s4[i][1] = period[1];
+      s4[i][2] = period[2];
+      s4[i][3] = period[3];
+   }else{
+      printf(lcd_escreve, "\fERROR. Sol %u\nnot recgnzd.",s);
+   }
+}
                          
 //funcao que permite o usuario alterar o horario inicial de irrigacao pelo keypad
 int alt_i(unsigned int i, unsigned int s){
@@ -296,6 +322,7 @@ int alt_f(unsigned int i, unsigned int s){
    
    printf(lcd_escreve, "\f    t%u DONE!\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
    delay_ms(3000); 
+   store_data(i, s);
    return 0;
 }
 
