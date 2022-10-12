@@ -1,0 +1,12 @@
+*.h
+*.ccspjt
+*.esym
+*.STA
+*.sym
+*.tre
+*.xsym
+*.cof
+*.hex
+*.lst
+*.err
+__history
