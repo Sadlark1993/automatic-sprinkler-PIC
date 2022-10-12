@@ -37,6 +37,7 @@ C1 PIN_B0
 C2 PIN_B1
 C3 PIN_B2
 C4 PIN_B3
+
 */
 
 
@@ -50,6 +51,9 @@ C4 PIN_B3
 
 #use delay(crystal=20000000)
 
+//comunicacao pelo protocolo I2C
+#use I2C(MASTER, I2C1, SLOW = 100000, STREAM = DS3231_STREAM)
+
 //Esquema dos pinos do LCD
 #ifndef lcd_enable
    #define lcd_enable pin_E1 // pino enable do LCD
@@ -61,29 +65,19 @@ C4 PIN_B3
    #define lcd_d7 pin_d7 // pino de dados d7 do LCD
 #endif
 
+//Pinos dos reles
+#define RELE1 PIN_C0
+#define RELE2 PIN_C1
+#define RELE3 PIN_C2
+#define RELE4 PIN_C5
+
 #include "mod_lcd.c"
 #include "kbd_ext_board2.c"
+#include "DS3231.c" //RTC library
 
 unsigned char k;
 unsigned int sol;
-
-#INT_RB
-void  RB_isr(void) 
-{
-   clear_interrupt(INT_RB);
-   output_toggle(PIN_D0);
-   //disable_interrupts(INT_RB);
-   if(!input(PIN_B4)||!input(PIN_B5)||!input(PIN_B6)||!input(PIN_B7)){
-      //printf(lcd_escreve, "\fEntrando int");
-      k = tc_tecla(15);
-      output_low(PIN_B0);
-      output_low(PIN_B1);
-      output_low(PIN_B2);
-      output_low(PIN_B3);
-      //printf(lcd_escreve, "\fSaindo int");
-   }
-   //enable_interrupts(INT_RB);
-}
+unsigned int aux = 0;
 
 //tabelas de dados dos solenoides: hi,mi,hf,mf.
 unsigned int s1[4][4] = {{13,0,14,30},
@@ -107,6 +101,27 @@ unsigned int s4[4][4] = {{0,0,0,0},
                          {0,0,0,0}};
                          
 unsigned int period[4]; //variavel auxiliar q guardara temporariamente um periodo
+RTC_Time *myTime; //variavel struct da biblioteca do RTC DS3231.C
+
+#INT_RB
+void  RB_isr(void) 
+{
+   clear_interrupt(INT_RB);
+   //disable_interrupts(INT_RB);
+   if(!input(PIN_B4)||!input(PIN_B5)||!input(PIN_B6)||!input(PIN_B7)){
+      //printf(lcd_escreve, "\fEntrando int");
+      output_high(PIN_D0);
+      k = tc_tecla(15);
+      output_low(PIN_B0);
+      output_low(PIN_B1);
+      output_low(PIN_B2);
+      output_low(PIN_B3);
+      //printf(lcd_escreve, "\fSaindo int");
+   }
+   output_low(PIN_D0);
+   //enable_interrupts(INT_RB);
+}
+
 
 void store_data(unsigned int i, unsigned int s){
    if(s == 1){
@@ -133,7 +148,82 @@ void store_data(unsigned int i, unsigned int s){
       printf(lcd_escreve, "\fERROR. Sol %u\nnot recgnzd.",s);
    }
 }
-                         
+
+//funcao q decide se o estamos dentro do periodo de irrigacao
+//vars: hora inicia, minuto inicial, hora final, minuto final.
+int1 switchSprinkler(unsigned int hi, unsigned int mi, unsigned int hf, unsigned int mf){
+   if(hi<hf){ //hora inicial < hora final
+      if(myTime->hours >= hi){
+         if(myTime->hours > hf) return 0;
+         else if(myTime->hours < hf) return 1;
+         else{
+            if(myTime->minutes < mf) return 1;
+            else return 0;
+         }
+      }else return 0;
+   }else if(hi == hf){ //hora inicial e hora final iguais
+      if(mi<=mf){
+         if(myTime->hours == hi && myTime->minutes >= mi && myTime->minutes < mf) return 1;
+         else return 0; // <-- os periodos nao programados vai entrar aqui
+      }else{ //Quase o dia inteiro ligado
+         if(myTime->hours != hi || myTime->minutes >= mi || myTime->minutes <= mf) return 1;
+         else return 0;
+      }
+   }else{ //horario de irrigacao passa pela meia noite
+      if(myTime->hours == hi){
+         if(myTime->minutes >= mi) return 1;
+         else return 0;
+      }else if(myTime->hours > hi || myTime->hours < hf) return 1;
+      else if(myTime->hours == hf){
+         if(myTime->minutes < mf) return 1;
+         else return 0;
+      } return 0;
+   }
+}
+
+void irrigate(){
+   int1 relS1 = 0;
+   int1 relS2 = 0;
+   int1 relS3 = 0;
+   int1 relS4 = 0;
+   
+   unsigned int j;
+   
+   //s1
+   for(j = 0; j < 4 && !relS1; j++){
+      relS1 = switchSprinkler(s1[j][0], s1[j][1], s1[j][2], s1[j][3]);
+   }
+   
+   //s2
+   for(j = 0; j < 4 && !relS2; j++){
+      relS2 = switchSprinkler(s2[j][0], s2[j][1], s2[j][2], s2[j][3]);
+   }
+   
+   //s3
+   for(j = 0; j < 4 && !relS3; j++){
+      relS3 = switchSprinkler(s3[j][0], s3[j][1], s3[j][2], s3[j][3]);
+   }
+   
+   //s4
+   for(j = 0; j < 4 && !relS4; j++){
+      relS4 = switchSprinkler(s4[j][0], s4[j][1], s4[j][2], s4[j][3]);
+   }
+   
+   if(relS1) output_high(RELE1);
+   else output_low(RELE1);
+   
+   if(relS2) output_high(RELE2);
+   else output_low(RELE2);
+   
+   if(relS3) output_high(RELE3);
+   else output_low(RELE3);
+   
+   if(relS4) output_high(RELE4);
+   else output_low(RELE4);
+   
+   output_toggle(PIN_D1);
+}
+          
 //funcao que permite o usuario alterar o horario inicial de irrigacao pelo keypad
 int alt_i(unsigned int i, unsigned int s){
    int1 f = 1;
@@ -231,6 +321,7 @@ int alt_i(unsigned int i, unsigned int s){
    return 0;
 }
 
+//Funcao q altera o horario final do periodo de irrigacao
 int alt_f(unsigned int i, unsigned int s){
    int1 f = 1;
    unsigned int num;
@@ -353,9 +444,13 @@ void sol1(){
       }else if(k=='*'){
          alt_i(i, 1);
          alt_f(i, 1);
+      }else if(k=='#'){
+         s1[i][0] = 0;
+         s1[i][1] = 0;
+         s1[i][2] = 0;
+         s1[i][3] = 0;
       }
       delay_ms(150);
-      output_toggle(PIN_D1);
    } 
 }
 
@@ -383,9 +478,13 @@ void sol2(){
       }else if(k=='*'){
          alt_i(i, 2);
          alt_f(i, 2);
+      }else if(k=='#'){
+         s2[i][0] = 0;
+         s2[i][1] = 0;
+         s2[i][2] = 0;
+         s2[i][3] = 0;
       }
       delay_ms(150);
-      output_toggle(PIN_D1);
    } 
 }
 
@@ -413,9 +512,13 @@ void sol3(){
       }else if(k=='*'){
          alt_i(i, 3);
          alt_f(i, 3);
+      }else if(k=='#'){
+         s3[i][0] = 0;
+         s3[i][1] = 0;
+         s3[i][2] = 0;
+         s3[i][3] = 0;
       }
       delay_ms(150);
-      output_toggle(PIN_D1);
    } 
 }
 
@@ -439,10 +542,26 @@ void sol4(){
       }else if(k=='*'){
          alt_i(i, 4);
          alt_f(i, 4);
+      }else if(k=='#'){
+         s4[i][0] = 0;
+         s4[i][1] = 0;
+         s4[i][2] = 0;
+         s4[i][3] = 0;
       }
       delay_ms(150);
-      output_toggle(PIN_D1);
    } 
+}
+
+//interrupcao q vai ativar a funcao de irrigacao
+#INT_TIMER1 
+void  TIMER1_isr(void) 
+{
+   aux++;
+   if(aux>=50){//a cada 5 segundos
+      aux=0;
+      myTime = RTC_Get(); //leitura do relogio
+      irrigate(); //funcao kernel do codigo
+   }
 }
 
 void main()
@@ -463,9 +582,22 @@ void main()
    lcd_ini();
    delay_ms(100);
    printf(lcd_escreve, "\fIFMT 2022");
+   delay_ms(1000);
    
    sol = 1;
    k = 255;
+   
+   //timer 1 que vai executar o ligamento-desligamento dos reles.
+   setup_timer_1(T1_INTERNAL|T1_DIV_BY_8);      //104 ms overflow
+   enable_interrupts(INT_TIMER1);
+   enable_interrupts(GLOBAL);
+   
+   myTime = RTC_Get(); //leitura do relogio
+   
+   output_low(RELE1);
+   output_low(RELE2);
+   output_low(RELE3);
+   output_low(RELE4);
 
    while(TRUE)
    {
