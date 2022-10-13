@@ -43,7 +43,7 @@ C4 PIN_B3
 
 //#include <projetoPIC.h>
 #include <16F877A.h>
-#device ADC=16
+#device ADC=10
 
 #FUSES NOWDT                    //No Watch Dog Timer
 #FUSES NOBROWNOUT               //No brownout reset
@@ -75,34 +75,67 @@ C4 PIN_B3
 #include "kbd_ext_board2.c"
 #include "DS3231.c" //RTC library
 
-unsigned char k;
-unsigned int sol;
+unsigned char k = 255;
+unsigned int sol = 1;
 unsigned int aux = 0;
 
 //tabelas de dados dos solenoides: hi,mi,hf,mf.
-unsigned int s1[4][4] = {{13,0,14,30},
-                         {17,30,19,0},
-                         {0,0,2,20},
-                         {0,0,0,0}};
-                         
-unsigned int s2[4][4] = {{0,0,0,0},
-                         {0,0,0,0},
-                         {0,0,0,0},
-                         {0,0,0,0}};
-                         
-unsigned int s3[4][4] = {{0,0,0,0},
-                         {0,0,0,0},
-                         {0,0,0,0},
-                         {0,0,0,0}};
-                         
-unsigned int s4[4][4] = {{0,0,0,0},
-                         {0,0,0,0},
-                         {0,0,0,0},
-                         {0,0,0,0}};
-                         
+unsigned int s1[4][4];
+unsigned int s2[4][4];   
+unsigned int s3[4][4];   
+unsigned int s4[4][4];
 unsigned int period[4]; //variavel auxiliar q guardara temporariamente um periodo
 RTC_Time *myTime; //variavel struct da biblioteca do RTC DS3231.C
 
+//funcao q recupera dados das tabelas na memoria eeprom
+void recoverData(){
+   unsigned int eData;
+   unsigned int i;
+   unsigned int j;
+   unsigned int addr = 0;
+   
+   //recuperando dados da tabela s1:
+   for(i=0;i<4;i++){
+      for(j=0;j<4;j++){
+         eData = read_eeprom(addr);
+         if(eData == 255) s1[i][j] = 0;
+         else s1[i][j] = eData;
+         addr++;
+      }
+   }
+   
+   //s2
+   for(i=0;i<4;i++){
+      for(j=0;j<4;j++){
+         eData = read_eeprom(addr);
+         if(eData == 255) s2[i][j] = 0;
+         else s2[i][j] = eData;
+         addr++;
+      }
+   }
+   
+   //s3
+   for(i=0;i<4;i++){
+      for(j=0;j<4;j++){
+         eData = read_eeprom(addr);
+         if(eData == 255) s3[i][j] = 0;
+         else s3[i][j] = eData;
+         addr++;
+      }
+   }
+   
+   //s4
+   for(i=0;i<4;i++){
+      for(j=0;j<4;j++){
+         eData = read_eeprom(addr);
+         if(eData == 255) s4[i][j] = 0;
+         else s4[i][j] = eData;
+         addr++;
+      }
+   }
+}
+
+//interrupcao q le o keypad
 #INT_RB
 void  RB_isr(void) 
 {
@@ -123,31 +156,39 @@ void  RB_isr(void)
 }
 
 
-void store_data(unsigned int i, unsigned int s){
-   if(s == 1){
-      s1[i][0] = period[0];
-      s1[i][1] = period[1];
-      s1[i][2] = period[2];
-      s1[i][3] = period[3];
-   }else if(s == 2){
-      s2[i][0] = period[0];
-      s2[i][1] = period[1];
-      s2[i][2] = period[2];
-      s2[i][3] = period[3];
-   }else if(s == 3){
-      s3[i][0] = period[0];
-      s3[i][1] = period[1];
-      s3[i][2] = period[2];
-      s3[i][3] = period[3];
-   }else if(s == 4){
-      s4[i][0] = period[0];
-      s4[i][1] = period[1];
-      s4[i][2] = period[2];
-      s4[i][3] = period[3];
-   }else{
-      printf(lcd_escreve, "\fERROR. Sol %u\nnot recgnzd.",s);
+//funcoes q atualizam os dados na tabela e persiste na memoria eeprom: 64 variaveis/bytes
+void store_data1(unsigned int i){//grava a parter do end 0
+   unsigned int j;
+   for(j=0; j<4; j++){
+      s1[i][j] = period[j];
+      write_eeprom(i*4+j, period[j]);
    }
 }
+
+void store_data2(unsigned int i){//grava a partir do end 16
+   unsigned int j;
+   for(j=0; j<4; j++){
+      s2[i][j] = period[j];
+      write_eeprom(i*4+16+j, period[j]);
+   }
+}
+
+void store_data3(unsigned int i){//grava a partir do end 32
+   unsigned int j;
+   for(j=0; j<4; j++){
+      s3[i][j] = period[j];
+      write_eeprom(i*4+32+j, period[j]);
+   }
+}
+
+void store_data4(unsigned int i){//grava a partir do end 48
+   unsigned int j;
+   for(j=0; j<4; j++){
+      s4[i][j] = period[j];
+      write_eeprom(i*4+48+j, period[j]);
+   }
+}
+
 
 //funcao q decide se o estamos dentro do periodo de irrigacao
 //vars: hora inicia, minuto inicial, hora final, minuto final.
@@ -225,9 +266,10 @@ void irrigate(){
 }
           
 //funcao que permite o usuario alterar o horario inicial de irrigacao pelo keypad
-int alt_i(unsigned int i, unsigned int s){
+int1 alt_i(unsigned int i, unsigned int s){
    int1 f = 1;
    unsigned int num;
+   int1 d=1;
    
    period[0] = 0;
    period[1] = 0;
@@ -235,186 +277,130 @@ int alt_i(unsigned int i, unsigned int s){
    period[3] = 0;
    
    k=255;
-   //dezenas da h inicial
+   //h inicial
    while(f){
       printf(lcd_escreve, "\fset hi for t%u\n%02u:%02u-%02u:%02u", (i+1), period[0], period[1], period[2], period[3]);
       if(k>=48 && k<=57){ //se for digito
          num = k-48;
-         period[0] = num*10;
+         if(d){
+            period[0] = num*10;
+            d = 0;
+         }else{
+            period[0] += num%10;
+            d=1;
+            f=0;
+         }
          k=255;
-         f = 0;  
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset hi for t%u\n  :%02u-%02u:%02u",(i+1), period[1], period[2], period[3]);
-      delay_ms(250);
-   }
-   f = 1;
-   
-   //unidades da h inicial
-   while(f){
-      printf(lcd_escreve, "\fset hi for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[0] += num%10;
-         k=255;
-         f = 0;
          if(period[0]>23){ //horas nao podem ultrapassar 23
             printf(lcd_escreve, "\fERRO. %02u > 23",period[0]);
             delay_ms(3000);
-            k = 255;
             return 0;
          }
       }else if(k == '#'){
          k=255;
          return 0;
       }
-      delay_ms(250);
+      delay_ms(100);
+      /*
       printf(lcd_escreve, "\fset hi for t%u\n  :%02u-%02u:%02u",(i+1), period[1], period[2], period[3]);
       delay_ms(250);
-   }
-   f=1;
-   
-   //dezenas do m inicial
-   while(f){
-      printf(lcd_escreve, "\fset mi for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[1] = num*10;
-         k=255;
-         f = 0;
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset mi for t%u\n%02u:  -%02u:%02u",(i+1), period[0], period[2], period[3]);
-      delay_ms(250);
-   }
-   f=1;
-   
-   //unidades do m inicial
-   while(f){
-      printf(lcd_escreve, "\fset mi for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[1] += num%10;
-         k=255;
-         f = 0;
-         if(period[1]>59){ //minutos nao podem ultrapassar 59
-            printf(lcd_escreve, "\fERRO. %u > 59",period[1]);
-            delay_ms(3000);
-            k = 255;
-            return 0;
-         }
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset mi for t%u\n%02u:  -%02u:%02u",(i+1), period[0], period[2], period[3]);
-      delay_ms(250);
-   }
-   f = 1; 
-   return 0;
-}
-
-//Funcao q altera o horario final do periodo de irrigacao
-int alt_f(unsigned int i, unsigned int s){
-   int1 f = 1;
-   unsigned int num;
-   k=255;
-
-//dezenas da h final
-   while(f){
-      printf(lcd_escreve, "\fset hf for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[2] = num*10;
-         k=255;
-         f = 0;
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset hf for t%u\n%02u:%02u-  :%02u",(i+1), period[0], period[1], period[3]);
-      delay_ms(250);
-   }
-   f=1;
-   
-   //unidades da h final
-   while(f){
-      printf(lcd_escreve, "\fset hf for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[2] += num%10;
-         k=255;
-         f = 0;
-         if(period[2]>23){
-            printf(lcd_escreve, "\fERRO. %02u > 23",period[2]);
-            delay_ms(3000);
-            k = 255;
-            return 0;
-         }
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset hf for t%u\n%02u:%02u-  :%02u",(i+1), period[0], period[1], period[3]);
-      delay_ms(250);
-   }
-   f=1;
-   
-   //dezenas do m final
-   while(f){
-      printf(lcd_escreve, "\fset mf for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[3] = num*10;
-         k=255;
-         f = 0;
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset mf for t%u\n%02u:%02u-%02u:  ",(i+1), period[0], period[1], period[2]);
-      delay_ms(250);
-   }
-   f=1;
-   
-   //unidades do m final
-   while(f){
-      printf(lcd_escreve, "\fset mf for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-      if(k>=48 && k<=57){ //se for digito
-         num = k-48;
-         period[3] += num%10;
-         k=255;
-         f = 0;
-         if(period[3]>59){ //minutos nao podem ultrapassar 59
-            printf(lcd_escreve, "\fERRO. %u > 59",period[3]);
-            delay_ms(3000);
-            k = 255;
-            return 0;
-         }
-      }else if(k == '#'){
-         k=255;
-         return 0;
-      }
-      delay_ms(250);
-      printf(lcd_escreve, "\fset mf for t%u\n%02u:%02u-%02u:  ",(i+1), period[0], period[1], period[2]);
-      delay_ms(250);
+      */
    }
    f = 1;
    
-   printf(lcd_escreve, "\f    t%u DONE!\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
-   delay_ms(3000); 
-   store_data(i, s);
-   return 0;
+   //m inicial
+   while(f){
+      printf(lcd_escreve, "\fset mi for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
+      if(k>=48 && k<=57){ //se for digito
+         num = k-48;
+         if(d){
+            period[1] = num*10;
+            d=0;
+         }else{
+            period[1] += num%10;
+            d=1;
+            f=0;
+         }
+         k=255;
+         if(period[1]>59){ //horas nao podem ultrapassar 23
+            printf(lcd_escreve, "\fERRO. %02u > 59",period[1]);
+            delay_ms(3000);
+            return 0;
+         }
+      }else if(k == '#'){
+         k=255;
+         return 0;
+      }
+      delay_ms(100);
+      /*
+      printf(lcd_escreve, "\fset mi for t%u\n%02u:  -%02u:%02u",(i+1), period[0], period[2], period[3]);
+      delay_ms(250);
+      */
+   }
+   f=1; 
+   
+   //h final
+   while(f){
+      printf(lcd_escreve, "\fset hf for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
+      if(k>=48 && k<=57){ //se for digito
+         num = k-48;
+         if(d){
+            period[2] = num*10;
+            d = 0;
+         }else{
+            period[2] += num%10;
+            d = 1;
+            f = 0;
+         }
+         k=255;
+         if(period[2]>23){ //horas nao podem ultrapassar 23
+            printf(lcd_escreve, "\fERRO. %02u > 23",period[2]);
+            delay_ms(3000);
+            return 0;
+         }
+      }else if(k == '#'){
+         k=255;
+         return 0;
+      }
+      delay_ms(100);
+      /*
+      printf(lcd_escreve, "\fset hf for t%u\n%02u:%02u-  :%02u",(i+1), period[0], period[1], period[3]);
+      delay_ms(250);
+      */
+   }
+   f=1;
+   
+   //m final
+   while(f){
+      printf(lcd_escreve, "\fset mf for t%u\n%02u:%02u-%02u:%02u",(i+1), period[0], period[1], period[2], period[3]);
+      if(k>=48 && k<=57){ //se for digito
+         num = k-48;
+         if(d){
+            period[3] = num*10;
+            d = 0;
+         }else{
+            period[3] += num%10;
+            d = 1;
+            f = 0;
+         }
+         if(period[3]>59){ //horas nao podem ultrapassar 23
+            printf(lcd_escreve, "\fERRO. %02u > 59",period[3]);
+            delay_ms(3000);
+            return 0;
+         }
+         k=255;
+      }else if(k == '#'){
+         k=255;
+         return 0;
+      }
+      delay_ms(100);
+      /*
+      printf(lcd_escreve, "\fset mf for t%u\n%02u:%02u-%02u:  ",(i+1), period[0], period[1], period[2]);
+      delay_ms(250);
+      */
+   }
+   return 1;
+   
 }
 
 /*
@@ -442,13 +428,15 @@ void sol1(){
          k = 255;
          f = 0;
       }else if(k=='*'){
-         alt_i(i, 1);
-         alt_f(i, 1);
+         if(alt_i(i, 1))
+            store_data1(i);
+      
       }else if(k=='#'){
          s1[i][0] = 0;
          s1[i][1] = 0;
          s1[i][2] = 0;
          s1[i][3] = 0;
+         store_data1(i);
       }
       delay_ms(150);
    } 
@@ -476,13 +464,14 @@ void sol2(){
          k = 255;
          f = 0;
       }else if(k=='*'){
-         alt_i(i, 2);
-         alt_f(i, 2);
+         if(alt_i(i, 2))
+            store_data2(i);
       }else if(k=='#'){
          s2[i][0] = 0;
          s2[i][1] = 0;
          s2[i][2] = 0;
          s2[i][3] = 0;
+         store_data2(i);
       }
       delay_ms(150);
    } 
@@ -510,13 +499,14 @@ void sol3(){
          k = 255;
          f = 0;
       }else if(k=='*'){
-         alt_i(i, 3);
-         alt_f(i, 3);
+         if(alt_i(i, 3))
+            store_data3(i);
       }else if(k=='#'){
          s3[i][0] = 0;
          s3[i][1] = 0;
          s3[i][2] = 0;
          s3[i][3] = 0;
+         store_data3(i);
       }
       delay_ms(150);
    } 
@@ -540,13 +530,14 @@ void sol4(){
          k = 255;
          f = 0;
       }else if(k=='*'){
-         alt_i(i, 4);
-         alt_f(i, 4);
+         if(alt_i(i, 4))
+            store_data4(i);
       }else if(k=='#'){
          s4[i][0] = 0;
          s4[i][1] = 0;
          s4[i][2] = 0;
          s4[i][3] = 0;
+         store_data4(i);
       }
       delay_ms(150);
    } 
@@ -574,23 +565,20 @@ void main()
    output_low(PIN_B2);
    output_low(PIN_B3);
    
+   recoverData();
+   delay_ms(40);
+   
    clear_interrupt(INT_RB);
    enable_interrupts(INT_RB);
+
+   //timer 1 que vai executar o ligamento-desligamento dos reles.
+   setup_timer_1(T1_INTERNAL|T1_DIV_BY_8);      //104 ms overflow
+   enable_interrupts(INT_TIMER1);
    enable_interrupts(GLOBAL);
    
    delay_ms(100);
    lcd_ini();
    delay_ms(100);
-   printf(lcd_escreve, "\fIFMT 2022");
-   delay_ms(1000);
-   
-   sol = 1;
-   k = 255;
-   
-   //timer 1 que vai executar o ligamento-desligamento dos reles.
-   setup_timer_1(T1_INTERNAL|T1_DIV_BY_8);      //104 ms overflow
-   enable_interrupts(INT_TIMER1);
-   enable_interrupts(GLOBAL);
    
    myTime = RTC_Get(); //leitura do relogio
    
@@ -610,9 +598,6 @@ void main()
             sol3();
          }else if(sol == 4){
             sol4();
-         }else{
-               printf(lcd_escreve, "\fERRO:\nNo Sol Selected");
-               delay_ms(200);
          }
    }
 }
