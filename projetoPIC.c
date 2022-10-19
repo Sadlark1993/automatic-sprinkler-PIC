@@ -432,10 +432,10 @@ void sol1(){
             store_data1(i);
       
       }else if(k=='#'){
-         s1[i][0] = 0;
-         s1[i][1] = 0;
-         s1[i][2] = 0;
-         s1[i][3] = 0;
+         period[0] = 0;
+         period[1] = 0;
+         period[2] = 0;
+         period[3] = 0;
          store_data1(i);
       }
       delay_ms(150);
@@ -467,10 +467,10 @@ void sol2(){
          if(alt_i(i, 2))
             store_data2(i);
       }else if(k=='#'){
-         s2[i][0] = 0;
-         s2[i][1] = 0;
-         s2[i][2] = 0;
-         s2[i][3] = 0;
+         period[0] = 0;
+         period[1] = 0;
+         period[2] = 0;
+         period[3] = 0;
          store_data2(i);
       }
       delay_ms(150);
@@ -502,10 +502,10 @@ void sol3(){
          if(alt_i(i, 3))
             store_data3(i);
       }else if(k=='#'){
-         s3[i][0] = 0;
-         s3[i][1] = 0;
-         s3[i][2] = 0;
-         s3[i][3] = 0;
+         period[0] = 0;
+         period[1] = 0;
+         period[2] = 0;
+         period[3] = 0;
          store_data3(i);
       }
       delay_ms(150);
@@ -533,10 +533,10 @@ void sol4(){
          if(alt_i(i, 4))
             store_data4(i);
       }else if(k=='#'){
-         s4[i][0] = 0;
-         s4[i][1] = 0;
-         s4[i][2] = 0;
-         s4[i][3] = 0;
+         period[0] = 0;
+         period[1] = 0;
+         period[2] = 0;
+         period[3] = 0;
          store_data4(i);
       }
       delay_ms(150);
